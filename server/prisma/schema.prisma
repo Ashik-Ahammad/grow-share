@@ -1,0 +1,332 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+  output          = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum ListingType {
+  SELL
+  EXCHANGE
+  GIVEAWAY
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  RESERVED
+  SOLD
+  EXCHANGED
+  EXPIRED
+  CANCELLED
+}
+
+enum PlantStage {
+  SEED
+  SEEDLING
+  GROWING
+  FLOWERING
+  FRUITING
+  HARVESTED
+  DEAD
+}
+
+enum TransactionStatus {
+  PENDING
+  ACCEPTED
+  COMPLETED
+  CANCELLED
+}
+
+enum ExchangeStatus {
+  REQUESTED
+  ACCEPTED
+  REJECTED
+  MEETUP_SCHEDULED
+  COMPLETED
+  CANCELLED
+}
+
+model User {
+  id              String            @id @default(uuid())
+  email           String            @unique
+  name            String
+  password        String
+  bio             String?
+  location        String?
+  profileImage    String?
+  role            UserRole          @default(USER)
+  isEmailVerified Boolean           @default(false)
+  isDeleted       Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  gardens         Garden[]
+  posts           Post[]
+  comments        Comment[]
+  postLikes       PostLike[]
+  listings        Listing[]
+  buyerTrans      Transaction[]     @relation("BuyerTransactions")
+  sellerTrans     Transaction[]     @relation("SellerTransactions")
+  exchangesReq    ExchangeRequest[] @relation("ExchangeRequester")
+  exchangesRec    ExchangeRequest[] @relation("ExchangeReceiver")
+  givenReviews    Review[]          @relation("GivenReviews")
+  receivedReviews Review[]          @relation("ReceivedReviews")
+  wishlist        Wishlist[]
+  notifications   Notification[]
+  reports         Report[]          @relation("Reporter")
+  reportedUser    Report[]          @relation("ReportedUser")
+
+  @@map("users")
+}
+
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?
+  isDeleted   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  plants      Plant[]
+  listings    Listing[]
+
+  @@map("categories")
+}
+
+model Plant {
+  id                  String      @id @default(uuid())
+  name                String
+  scientificName      String?
+  categoryId          String
+  category            Category    @relation(fields: [categoryId], references: [id])
+  description         String?
+  sunlightRequirement String?
+  waterRequirement    String?
+  soilType            String?
+  growingSeason       String?
+  harvestDuration     String?
+  difficulty          String?
+  isDeleted           Boolean     @default(false)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  userPlants          UserPlant[]
+
+  @@map("plants")
+}
+
+model Garden {
+  id        String      @id @default(uuid())
+  name      String
+  userId    String
+  user      User        @relation(fields: [userId], references: [id])
+  isDeleted Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  plants    UserPlant[]
+
+  @@map("gardens")
+}
+
+model UserPlant {
+  id            String         @id @default(uuid())
+  plantId       String
+  plant         Plant          @relation(fields: [plantId], references: [id])
+  gardenId      String
+  garden        Garden         @relation(fields: [gardenId], references: [id])
+  quantity      Int            @default(1)
+  plantedDate   DateTime?
+  location      String?
+  growthStage   PlantStage     @default(SEED)
+  healthStatus  String?
+  notes         String?
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  careSchedules CareSchedule[]
+
+  @@map("user_plants")
+}
+
+model CareSchedule {
+  id          String    @id @default(uuid())
+  userPlantId String
+  userPlant   UserPlant @relation(fields: [userPlantId], references: [id])
+  taskType    String // Watering, Fertilizing, Pruning, etc.
+  frequency   String // e.g., "Every 2 days"
+  lastDone    DateTime?
+  nextDue     DateTime?
+  isDeleted   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("care_schedules")
+}
+
+model Post {
+  id          String     @id @default(uuid())
+  title       String?
+  description String
+  postType    String     @default("General") // General, Question, Gardening Tip, Plant Update
+  userId      String
+  user        User       @relation(fields: [userId], references: [id])
+  isDeleted   Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  comments    Comment[]
+  likes       PostLike[]
+
+  @@map("posts")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("comments")
+}
+
+model PostLike {
+  id        String   @id @default(uuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+  @@map("post_likes")
+}
+
+model Listing {
+  id          String        @id @default(uuid())
+  title       String
+  description String
+  price       Float?
+  quantity    Int           @default(1)
+  categoryId  String
+  category    Category      @relation(fields: [categoryId], references: [id])
+  type        ListingType   @default(SELL)
+  status      ListingStatus @default(DRAFT)
+  location    String
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  isDeleted   Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  transactions Transaction[]
+  wishlists    Wishlist[]
+  exchanges    ExchangeRequest[]
+
+  @@map("listings")
+}
+
+model Transaction {
+  id          String            @id @default(uuid())
+  listingId   String
+  listing     Listing           @relation(fields: [listingId], references: [id])
+  buyerId     String
+  buyer       User              @relation("BuyerTransactions", fields: [buyerId], references: [id])
+  sellerId    String
+  seller      User              @relation("SellerTransactions", fields: [sellerId], references: [id])
+  quantity    Int
+  price       Float?
+  status      TransactionStatus @default(PENDING)
+  createdAt   DateTime          @default(now())
+  completedAt DateTime?
+
+  reviews     Review[]
+
+  @@map("transactions")
+}
+
+model ExchangeRequest {
+  id            String         @id @default(uuid())
+  listingId     String
+  listing       Listing        @relation(fields: [listingId], references: [id])
+  requesterId   String
+  requester     User           @relation("ExchangeRequester", fields: [requesterId], references: [id])
+  receiverId    String
+  receiver      User           @relation("ExchangeReceiver", fields: [receiverId], references: [id])
+  offeredItems  String
+  status        ExchangeStatus @default(REQUESTED)
+  isDeleted     Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@map("exchange_requests")
+}
+
+model Review {
+  id            String       @id @default(uuid())
+  transactionId String
+  transaction   Transaction  @relation(fields: [transactionId], references: [id])
+  reviewerId    String
+  reviewer      User         @relation("GivenReviews", fields: [reviewerId], references: [id])
+  revieweeId    String
+  reviewee      User         @relation("ReceivedReviews", fields: [revieweeId], references: [id])
+  rating        Int
+  comment       String?
+  createdAt     DateTime     @default(now())
+
+  @@map("reviews")
+}
+
+model Wishlist {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@map("wishlists")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model Report {
+  id             String   @id @default(uuid())
+  reporterId     String
+  reporter       User     @relation("Reporter", fields: [reporterId], references: [id])
+  reportedUserId String?
+  reportedUser   User?    @relation("ReportedUser", fields: [reportedUserId], references: [id])
+  postId         String?
+  commentId      String?
+  listingId      String?
+  reason         String
+  status         String   @default("PENDING")
+  createdAt      DateTime @default(now())
+
+  @@map("reports")
+}

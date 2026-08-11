@@ -24,6 +24,7 @@ const getAllPosts = async (query: any) => {
       where: { isDeleted: false },
       include: {
         user: { select: { id: true, name: true, profileImage: true } },
+        likes: { select: { id: true, userId: true } },
         _count: { select: { likes: true, comments: { where: { isDeleted: false } } } }
       },
       orderBy: { createdAt: "desc" },

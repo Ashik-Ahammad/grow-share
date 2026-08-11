@@ -15,17 +15,38 @@ export default function Dashboard() {
   const [editGardenId, setEditGardenId] = useState<string | null>(null);
   const [gardenName, setGardenName] = useState("");
   const [gardenLocation, setGardenLocation] = useState("");
+  const [availablePlants, setAvailablePlants] = useState<any[]>([]);
+  const [activeGardenId, setActiveGardenId] = useState<string | null>(null);
+  const [selectedPlantId, setSelectedPlantId] = useState("");
+
+  const handleAddPlant = async (gardenId: string) => {
+    if (!selectedPlantId) {
+      toast.warning("Please select a plant");
+      return;
+    }
+    try {
+      await api.post("/user-plants", { gardenId, plantId: selectedPlantId });
+      toast.success("Plant added to garden!");
+      setSelectedPlantId("");
+      setActiveGardenId(null);
+      fetchData();
+    } catch (err) {
+      toast.error("Failed to add plant");
+    }
+  };
 
   const fetchData = async () => {
     try {
       const userStr = localStorage.getItem("user");
       const user = userStr ? JSON.parse(userStr) : {};
-      const [gardensRes, listingsRes] = await Promise.all([
+      const [gardensRes, listingsRes, plantsRes] = await Promise.all([
         api.get("/gardens"),
-        api.get("/listings")
+        api.get("/listings"),
+        api.get("/plants")
       ]);
       if (gardensRes.data.success) setGardens(gardensRes.data.data);
       if (listingsRes.data.success) setListings(listingsRes.data.data.filter((l: any) => l.userId === user.id));
+      if (plantsRes.data.success) setAvailablePlants(plantsRes.data.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -41,10 +62,10 @@ export default function Dashboard() {
     e.preventDefault();
     try {
       if (editGardenId) {
-        await api.patch(`/gardens/${editGardenId}`, { name: gardenName, location: gardenLocation });
+        await api.patch(`/gardens/${editGardenId}`, { name: gardenName });
         toast.success("Garden updated successfully!");
       } else {
-        await api.post("/gardens", { name: gardenName, location: gardenLocation });
+        await api.post("/gardens", { name: gardenName });
         toast.success("Garden created successfully!");
       }
       setGardenName("");
@@ -162,28 +183,51 @@ export default function Dashboard() {
               <div className="text-muted-foreground text-sm">Loading gardens...</div>
             ) : gardens.length === 0 ? (
               <div className="text-muted-foreground text-sm p-4 border border-dashed border-border rounded-xl text-center">No gardens created yet. Create one to start tracking plants!</div>
-            ) : gardens.map((garden) => (
-              <div key={garden.id} className="p-4 bg-background/50 border border-border rounded-2xl flex items-center justify-between hover:border-primary/30 transition-colors group">
-                <div className="flex items-center gap-3">
-                  <div className="bg-primary/20 p-2 rounded-xl"><Leaf className="w-5 h-5 text-primary" /></div>
-                  <div>
-                    <span className="font-bold block">{garden.name}</span>
-                    <span className="text-xs text-muted-foreground">{garden.location}</span>
+            ) : gardens.map((garden) => {
+              return (
+                <div key={garden.id} className="flex flex-col gap-2">
+                  <div className="p-4 bg-background/50 border border-border rounded-2xl flex items-center justify-between hover:border-primary/30 transition-colors group">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-primary/20 p-2 rounded-xl"><Leaf className="w-5 h-5 text-primary" /></div>
+                      <div>
+                        <span className="font-bold block">{garden.name}</span>
+                        <span className="text-xs text-muted-foreground">{garden.location}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleEditGarden(garden)} className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg transition" title="Edit">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteGarden(garden.id)} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition" title="Delete">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <button onClick={() => setActiveGardenId(activeGardenId === garden.id ? null : garden.id)} className="flex items-center gap-1 text-sm bg-primary/20 text-primary px-3 py-1.5 rounded-lg hover:bg-primary/30 transition-colors font-medium ml-2">
+                        <Plus className="w-4 h-4" /> Add Plant
+                      </button>
+                      <button className="text-sm font-medium text-primary hover:underline bg-primary/10 px-3 py-1.5 rounded-lg ml-2">
+                        View Plants ({garden.plants?.length || 0})
+                      </button>
+                    </div>
                   </div>
+                  
+                  {activeGardenId === garden.id && (
+                    <div className="p-4 bg-background/30 rounded-xl border border-border flex flex-col sm:flex-row gap-3">
+                      <select value={selectedPlantId} onChange={e => setSelectedPlantId(e.target.value)} className="flex-1 bg-background border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary">
+                        <option value="" disabled>Select a plant from database</option>
+                        {availablePlants.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                      <button onClick={() => handleAddPlant(garden.id)} className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-sm font-bold shrink-0">
+                        Add
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => handleEditGarden(garden)} className="p-2 text-blue-500 hover:bg-blue-500/10 rounded-lg transition" title="Edit">
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button onClick={() => handleDeleteGarden(garden.id)} className="p-2 text-rose-500 hover:bg-rose-500/10 rounded-lg transition" title="Delete">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                  <button className="text-sm font-medium text-primary hover:underline bg-primary/10 px-3 py-1.5 rounded-lg ml-2">View Plants ({garden.plants?.length || 0})</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </motion.div>
 

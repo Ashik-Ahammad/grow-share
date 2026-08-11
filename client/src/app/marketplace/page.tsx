@@ -1,28 +1,50 @@
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Filter, Plus } from "lucide-react";
+import { Leaf, Filter, MessageCircle, Heart, Share2, Plus, Edit, Trash2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import api from "@/lib/api/axios";
+import { toast } from "react-toastify";
 
 export default function Marketplace() {
+  const [activeTab, setActiveTab] = useState("all");
   const [listings, setListings] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [formData, setFormData] = useState({ title: "", description: "", price: 0, type: "SELL", location: "" });
   
-  const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("ALL");
+  const [categories, setCategories] = useState<any[]>([]);
+  const [editListingId, setEditListingId] = useState<string | null>(null);
 
-  const fetchListings = async () => {
+  const [formData, setFormData] = useState({
+    title: "",
+    description: "",
+    price: "",
+    type: "SELL",
+    location: "",
+    categoryId: ""
+  });
+
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    setCurrentUser(JSON.parse(localStorage.getItem('user') || 'null'));
+    fetchData();
+  }, [activeTab]);
+
+  const fetchData = async () => {
     try {
-      setLoading(true);
-      let query = "/listings?";
-      if (search) query += `search=${search}&`;
-      if (typeFilter !== "ALL") query += `type=${typeFilter}&`;
-      
-      const res = await api.get(query);
-      if (res.data.success) {
-        setListings(res.data.data);
+      const [listingsRes, categoriesRes] = await Promise.all([
+        api.get("/listings"),
+        api.get("/categories")
+      ]);
+      if (listingsRes.data.success) {
+        let filtered = listingsRes.data.data;
+        if (activeTab !== "all") {
+          filtered = filtered.filter((item: any) => item.type === activeTab.toUpperCase());
+        }
+        setListings(filtered);
+      }
+      if (categoriesRes.data.success) {
+        setCategories(categoriesRes.data.data);
       }
     } catch (err) {
       console.error(err);
@@ -31,59 +53,92 @@ export default function Marketplace() {
     }
   };
 
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      fetchListings();
-    }, 300);
-    return () => clearTimeout(delayDebounceFn);
-  }, [search, typeFilter]);
-
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.categoryId) {
+      toast.warning("Please select a category first.");
+      return;
+    }
+    
     try {
-      await api.post("/listings", { ...formData, price: Number(formData.price) });
+      if (editListingId) {
+        await api.patch(`/listings/${editListingId}`, { ...formData, price: Number(formData.price), status: "ACTIVE" });
+        toast.success("Listing updated successfully!");
+      } else {
+        await api.post("/listings", { ...formData, price: Number(formData.price), status: "ACTIVE" });
+        toast.success("Listing created successfully!");
+      }
+      
+      setFormData({ title: "", description: "", price: "", type: "SELL", location: "", categoryId: "" });
+      setEditListingId(null);
       setShowCreate(false);
-      setFormData({ title: "", description: "", price: 0, type: "SELL", location: "" });
-      fetchListings();
+      fetchData();
     } catch (err) {
       console.error(err);
+      toast.error("Failed to save listing.");
+    }
+  };
+
+  const handleEditClick = (listing: any) => {
+    setEditListingId(listing.id);
+    setFormData({
+      title: listing.title,
+      description: listing.description,
+      price: listing.price?.toString() || "",
+      type: listing.type,
+      location: listing.location,
+      categoryId: listing.categoryId
+    });
+    setShowCreate(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this listing?")) return;
+    try {
+      await api.delete(`/listings/${id}`);
+      toast.success("Listing deleted successfully!");
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to delete listing.");
     }
   };
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-10">
-        <h1 className="text-3xl font-bold">Marketplace</h1>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Marketplace</h1>
+          <p className="text-muted-foreground">Trade, buy, or give away plants and seeds.</p>
+        </div>
         
-        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
-          <div className="relative w-full md:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input 
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search plants, seeds..."
-              className="w-full bg-background/50 border border-border rounded-xl pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-            />
+        <div className="flex items-center gap-3">
+          <div className="bg-background/50 border border-border rounded-xl p-1 flex">
+            {['all', 'sell', 'exchange', 'giveaway'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${
+                  activeTab === tab ? 'bg-primary text-primary-foreground shadow-lg' : 'hover:bg-primary/10'
+                }`}
+              >
+                {tab}
+              </button>
+            ))}
           </div>
-          
-          <select 
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="bg-background/50 border border-border rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all text-sm font-medium"
-          >
-            <option value="ALL">All Types</option>
-            <option value="SELL">Sell</option>
-            <option value="EXCHANGE">Exchange</option>
-            <option value="GIVEAWAY">Giveaway</option>
-          </select>
-          
           <button 
-            onClick={() => setShowCreate(!showCreate)}
-            className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-xl font-medium shadow-lg hover:bg-primary/90 transition-colors"
+            onClick={() => {
+              if (showCreate && editListingId) {
+                setEditListingId(null);
+                setFormData({ title: "", description: "", price: "", type: "SELL", location: "", categoryId: "" });
+              }
+              setShowCreate(!showCreate);
+            }}
+            className="bg-primary text-primary-foreground p-2 md:px-4 md:py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-5 h-5" />
-            Create
+            <span className="hidden md:inline">{editListingId ? "Cancel Edit" : "Create Listing"}</span>
           </button>
         </div>
       </div>
@@ -96,23 +151,39 @@ export default function Marketplace() {
             exit={{ opacity: 0, height: 0 }}
             className="mb-8 overflow-hidden"
           >
-            <form onSubmit={handleCreate} className="glass-morphism rounded-3xl p-6 border border-primary/20 max-w-2xl mx-auto space-y-4">
-              <h2 className="text-xl font-bold mb-4">Create New Listing</h2>
-              <input required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Title (e.g. Monstera Cutting)" className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50" />
-              <textarea required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Description" className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50" />
-              <div className="grid grid-cols-2 gap-4">
-                <input required type="number" value={formData.price} onChange={e => setFormData({...formData, price: Number(e.target.value)})} placeholder="Price" className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50" />
-                <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50 text-foreground">
-                  <option value="SELL">Sell</option>
-                  <option value="EXCHANGE">Exchange</option>
-                  <option value="GIVEAWAY">Giveaway</option>
-                </select>
+            <form onSubmit={handleSubmit} className="glass-morphism rounded-3xl p-6 md:p-8 border border-primary/20 max-w-2xl">
+              <h2 className="text-xl font-bold mb-6">{editListingId ? "Edit Listing" : "Create New Listing"}</h2>
+              
+              <div className="space-y-4 mb-6">
+                <input required value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} placeholder="Listing Title (e.g. Monstera Deliciosa)" className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50" />
+                <textarea required value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Description" className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50 min-h-[100px]" />
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="flex gap-4">
+                    <select required value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})} className="flex-1 bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50">
+                      <option value="SELL">Sell</option>
+                      <option value="EXCHANGE">Exchange</option>
+                      <option value="GIVEAWAY">Giveaway</option>
+                    </select>
+                    {formData.type === 'SELL' && (
+                      <input required type="number" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} placeholder="Price (৳)" className="flex-1 bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50" />
+                    )}
+                  </div>
+                  
+                  <select required value={formData.categoryId} onChange={e => setFormData({...formData, categoryId: e.target.value})} className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50">
+                    <option value="" disabled>Select Category</option>
+                    {categories.map(cat => (
+                      <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <input required value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} placeholder="Location (e.g. Dhaka)" className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50" />
               </div>
-              <input required value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} placeholder="Location (e.g. Dhaka)" className="w-full bg-background/50 border border-border rounded-xl p-3 focus:ring-2 focus:ring-primary/50" />
               
               <div className="flex justify-end pt-2">
                 <button type="submit" className="bg-primary text-primary-foreground px-6 py-2 rounded-xl font-bold hover:bg-primary/90">
-                  Publish Listing
+                  {editListingId ? "Update Listing" : "Publish Listing"}
                 </button>
               </div>
             </form>
@@ -131,8 +202,18 @@ export default function Marketplace() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: idx * 0.1 }}
-            className="glass-morphism rounded-3xl overflow-hidden group border border-border hover:border-primary/50 transition-colors flex flex-col"
+            className="glass-morphism rounded-3xl overflow-hidden group border border-border hover:border-primary/50 transition-colors flex flex-col relative"
           >
+            {currentUser?.id === item.userId && (
+              <div className="absolute top-3 right-3 z-10 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => handleEditClick(item)} className="bg-black/60 p-2 rounded-full text-blue-400 hover:text-white transition" title="Edit">
+                  <Edit className="w-4 h-4" />
+                </button>
+                <button onClick={() => handleDelete(item.id)} className="bg-black/60 p-2 rounded-full text-rose-400 hover:text-white transition" title="Delete">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             <div className="h-48 bg-muted flex items-center justify-center text-7xl relative">
               {item.type === 'GIVEAWAY' ? '🎁' : item.type === 'EXCHANGE' ? '🤝' : '🌱'}
               <div className="absolute top-3 left-3 bg-background/80 backdrop-blur-md px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border border-white/10">

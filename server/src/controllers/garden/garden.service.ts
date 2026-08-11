@@ -2,6 +2,7 @@ import { prisma } from "../../lib/prisma.js";
 import AppError from "../../utils/AppError.js";
 
 const createGarden = async (userId: string, payload: any) => {
+  console.log("Creating garden for user:", userId);
   const garden = await prisma.garden.create({
     data: {
       ...payload,

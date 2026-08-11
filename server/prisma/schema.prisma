@@ -127,6 +127,7 @@ model Plant {
 model Garden {
   id        String      @id @default(uuid())
   name      String
+  location  String?
   userId    String
   user      User        @relation(fields: [userId], references: [id])
   isDeleted Boolean     @default(false)
@@ -136,6 +137,7 @@ model Garden {
   plants    UserPlant[]
 
   @@map("gardens")
+  @@index([userId])
 }
 
 model UserPlant {
@@ -239,6 +241,9 @@ model Listing {
   exchanges    ExchangeRequest[]
 
   @@map("listings")
+  @@index([categoryId])
+  @@index([type, status])
+  @@index([userId])
 }
 
 model Transaction {

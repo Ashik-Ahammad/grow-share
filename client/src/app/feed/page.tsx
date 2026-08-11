@@ -94,14 +94,11 @@ export default function Feed() {
   };
 
   const toggleLike = async (postId: string) => {
-    // Optimistic UI
-    setLikedPosts(prev => ({ ...prev, [postId]: !prev[postId] }));
     try {
       await api.post("/likes", { postId });
       fetchPosts();
     } catch (err) {
-      // Revert if error (if duplicate, ignore)
-      fetchPosts();
+      console.error(err);
     }
   };
 
@@ -241,10 +238,10 @@ export default function Feed() {
               <div className="flex items-center gap-6 border-t border-border/50 pt-4">
                 <button 
                   onClick={() => toggleLike(post.id)}
-                  className={`flex items-center gap-2 transition-colors ${likedPosts[post.id] ? 'text-rose-500' : 'text-muted-foreground hover:text-rose-500'}`}
+                  className={`flex items-center gap-2 transition-colors ${post.likes?.some((l: any) => l.userId === currentUser?.id) ? 'text-rose-500' : 'text-muted-foreground hover:text-rose-500'}`}
                 >
-                  <Heart className={`w-5 h-5 ${likedPosts[post.id] ? 'fill-current' : ''}`} /> 
-                  <span className="font-medium">{(post._count?.likes || 0) + (likedPosts[post.id] ? 1 : 0)}</span>
+                  <Heart className={`w-5 h-5 ${post.likes?.some((l: any) => l.userId === currentUser?.id) ? 'fill-current' : ''}`} /> 
+                  <span className="font-medium">{post._count?.likes || 0}</span>
                 </button>
                 <button onClick={() => toggleComments(post.id)} className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors">
                   <MessageCircle className="w-5 h-5" /> <span className="font-medium">{post._count?.comments || 0}</span>
